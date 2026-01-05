@@ -51,7 +51,9 @@ public class CallService : ICallService
             Id = Guid.NewGuid(),
             CallId = call.Id,
             UserId = initiatorId,
-            JoinedAt = DateTime.UtcNow
+            JoinedAt = DateTime.UtcNow,
+            IsMuted = false,
+            IsVideoOn = type == CallType.Video
         };
 
         _context.Calls.Add(call);
@@ -131,7 +133,9 @@ public class CallService : ICallService
                 Id = Guid.NewGuid(),
                 CallId = callId,
                 UserId = userId,
-                JoinedAt = DateTime.UtcNow
+                JoinedAt = DateTime.UtcNow,
+                IsMuted = false,
+                IsVideoOn = call.Type == CallType.Video
             };
             _context.CallParticipants.Add(participant);
         }
@@ -252,9 +256,25 @@ public class CallService : ICallService
 
     public async Task UpdateParticipantStatusAsync(Guid callId, Guid userId, bool? isMuted = null, bool? isVideoOn = null)
     {
-        // For now, we don't persist mute/video state in the database
-        // This could be added later if needed for call analytics
-        await Task.CompletedTask;
+        var participant = await _context.CallParticipants
+            .FirstOrDefaultAsync(p => p.CallId == callId && p.UserId == userId && p.LeftAt == null);
+
+        if (participant == null)
+        {
+            throw new NotFoundException("Participant not found in call");
+        }
+
+        if (isMuted.HasValue)
+        {
+            participant.IsMuted = isMuted.Value;
+        }
+
+        if (isVideoOn.HasValue)
+        {
+            participant.IsVideoOn = isVideoOn.Value;
+        }
+
+        await _context.SaveChangesAsync();
     }
 
     private static CallDto MapToDto(Call call)
@@ -285,8 +305,8 @@ public class CallService : ICallService
                 AvatarUrl = p.User?.AvatarUrl,
                 JoinedAt = p.JoinedAt,
                 LeftAt = p.LeftAt,
-                IsMuted = false,
-                IsVideoOn = call.Type == CallType.Video
+                IsMuted = p.IsMuted,
+                IsVideoOn = p.IsVideoOn
             }).ToList()
         };
     }

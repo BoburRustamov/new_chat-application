@@ -237,6 +237,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
           onUnpin={handleUnpin}
           onReact={handleReact}
           onCopy={handleCopy}
+          chatMembers={chat.members}
         />
       )}
 

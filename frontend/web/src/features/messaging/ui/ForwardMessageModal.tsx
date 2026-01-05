@@ -3,6 +3,7 @@ import { X, Forward, Search, Check } from 'lucide-react';
 import { Button } from '@/shared/ui';
 import type { Message, Chat } from '@/shared/types';
 import { useChatStore } from '@/entities/chat/model/chatStore';
+import { useAuthStore } from '@/entities/user/model/authStore';
 import { signalRService } from '@/shared/api/signalr';
 
 interface ForwardMessageModalProps {
@@ -19,11 +20,24 @@ export function ForwardMessageModal({ message, isOpen, onClose, onSuccess }: For
   const [error, setError] = useState<string | null>(null);
 
   const { chats } = useChatStore();
+  const { user } = useAuthStore();
+
+  const getChatDisplayName = (chat: Chat) => {
+    if (chat.name) return chat.name;
+    // For private chats, show the other user's name
+    if (chat.type === 'Private' && chat.members && user) {
+      const otherMember = chat.members.find(m => m.userId !== user.id);
+      if (otherMember) {
+        return otherMember.displayName || otherMember.username;
+      }
+    }
+    return 'Chat';
+  };
 
   // Filter chats based on search query
   const filteredChats = chats.filter((chat) => {
     if (!searchQuery) return true;
-    const name = chat.name || '';
+    const name = getChatDisplayName(chat);
     return name.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
@@ -71,10 +85,6 @@ export function ForwardMessageModal({ message, isOpen, onClose, onSuccess }: For
       return `[${message.type}: ${message.file.fileName}]`;
     }
     return '[Message]';
-  };
-
-  const getChatDisplayName = (chat: Chat) => {
-    return chat.name || 'Chat';
   };
 
   const getChatAvatar = (chat: Chat) => {

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Chat, Message, PagedResponse, TypingEvent, SendMessageRequest } from '@/shared/types';
+import type { Chat, Message, PagedResponse, TypingEvent, SendMessageRequest, MessagesReadEvent } from '@/shared/types';
 import { apiClient } from '@/shared/api/client';
 import { signalRService } from '@/shared/api/signalr';
 
@@ -40,6 +40,7 @@ interface ChatState {
   setTypingUser: (event: TypingEvent) => void;
   removeTypingUser: (event: TypingEvent) => void;
   updateUserStatus: (userId: string, isOnline: boolean, lastSeenAt?: string) => void;
+  handleMessagesRead: (event: MessagesReadEvent) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -171,6 +172,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       signalRService.onMessageForwarded((message) => {
         // Optionally show a toast or update UI to confirm forward succeeded
         console.log('Message forwarded successfully:', message.id);
+      });
+
+      // MessagesRead event - update message status when messages are read by others
+      signalRService.onMessagesRead((event: MessagesReadEvent) => {
+        get().handleMessagesRead(event);
       });
 
       signalRService.onConnected(() => {
@@ -332,5 +338,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       })),
     }));
+  },
+
+  handleMessagesRead: (event: MessagesReadEvent) => {
+    set((state) => {
+      const chatMessages = state.messages[event.chatId];
+      if (!chatMessages) return state;
+
+      // Update all messages in this chat that were sent by the current user
+      // to show "Read" status since someone read them
+      const updatedMessages = chatMessages.map((message) => {
+        // Only update messages that are from someone other than the reader
+        // and update their status to Read
+        if (message.senderId !== event.userId && message.status !== 'Read') {
+          return { ...message, status: 'Read' as const };
+        }
+        return message;
+      });
+
+      return {
+        messages: {
+          ...state.messages,
+          [event.chatId]: updatedMessages,
+        },
+      };
+    });
   },
 }));

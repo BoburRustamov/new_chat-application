@@ -9,8 +9,9 @@ import {
   PinOff,
   SmilePlus,
 } from 'lucide-react';
-import type { Message } from '@/shared/types';
+import type { Message, ChatMember } from '@/shared/types';
 import { useAuthStore } from '@/entities/user/model/authStore';
+import { signalRService } from '@/shared/api/signalr';
 
 interface MessageContextMenuProps {
   message: Message;
@@ -25,6 +26,7 @@ interface MessageContextMenuProps {
   onUnpin: (message: Message) => void;
   onReact: (message: Message) => void;
   onCopy: (message: Message) => void;
+  chatMembers?: ChatMember[];
 }
 
 interface MenuItemProps {
@@ -67,6 +69,7 @@ export function MessageContextMenu({
   onUnpin,
   onReact,
   onCopy,
+  chatMembers,
 }: MessageContextMenuProps) {
   const { user } = useAuthStore();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -75,6 +78,10 @@ export function MessageContextMenu({
   const isOwnMessage = message.senderId === user?.id;
   const canEdit = isOwnMessage && !message.isDeleted && message.type === 'Text';
   const canDelete = isOwnMessage && !message.isDeleted;
+
+  // Check if user can pin/unpin messages (Owner, Admin, or Moderator)
+  const currentMember = chatMembers?.find(m => m.userId === user?.id);
+  const canPin = currentMember?.role === 'Owner' || currentMember?.role === 'Admin' || currentMember?.role === 'Moderator';
 
   // Check if message was sent within 48 hours (edit time limit)
   const isWithinEditLimit = () => {
@@ -166,7 +173,13 @@ export function MessageContextMenu({
           {['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) => (
             <button
               key={emoji}
-              onClick={() => handleAction(() => onReact(message))}
+              onClick={() => handleAction(async () => {
+                try {
+                  await signalRService.addReaction(message.id, emoji);
+                } catch (error) {
+                  console.error('Failed to add reaction:', error);
+                }
+              })}
               className="rounded p-1 text-lg transition-transform hover:scale-125 hover:bg-[hsl(var(--muted))]"
             >
               {emoji}
@@ -202,18 +215,20 @@ export function MessageContextMenu({
             onClick={() => handleAction(() => onReact(message))}
           />
 
-          {message.isPinned ? (
-            <MenuItem
-              icon={<PinOff className="h-4 w-4" />}
-              label="Unpin"
-              onClick={() => handleAction(() => onUnpin(message))}
-            />
-          ) : (
-            <MenuItem
-              icon={<Pin className="h-4 w-4" />}
-              label="Pin"
-              onClick={() => handleAction(() => onPin(message))}
-            />
+          {canPin && (
+            message.isPinned ? (
+              <MenuItem
+                icon={<PinOff className="h-4 w-4" />}
+                label="Unpin"
+                onClick={() => handleAction(() => onUnpin(message))}
+              />
+            ) : (
+              <MenuItem
+                icon={<Pin className="h-4 w-4" />}
+                label="Pin"
+                onClick={() => handleAction(() => onPin(message))}
+              />
+            )
           )}
 
           {canEdit && (

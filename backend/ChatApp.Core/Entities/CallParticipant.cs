@@ -7,6 +7,8 @@ public class CallParticipant
     public Guid UserId { get; set; }
     public DateTime JoinedAt { get; set; }
     public DateTime? LeftAt { get; set; }
+    public bool IsMuted { get; set; }
+    public bool IsVideoOn { get; set; }
 
     // Navigation properties
     public Call Call { get; set; } = null!;

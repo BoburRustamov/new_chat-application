@@ -5,6 +5,7 @@ using ChatApp.Core.Entities;
 using ChatApp.Core.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 
 namespace ChatApp.API.Hubs;
 
@@ -16,6 +17,8 @@ public class ChatHub : Hub
     private readonly IUserService _userService;
     private readonly IReactionService _reactionService;
     private readonly ICallService _callService;
+    private readonly IChannelService _channelService;
+    private readonly ILogger<ChatHub> _logger;
     private static readonly Dictionary<Guid, HashSet<string>> _userConnections = new();
     private static readonly Dictionary<Guid, Dictionary<Guid, ParticipantMediaState>> _callParticipantStates = new();
     private static readonly object _lock = new();
@@ -25,13 +28,17 @@ public class ChatHub : Hub
         IMessageService messageService,
         IUserService userService,
         IReactionService reactionService,
-        ICallService callService)
+        ICallService callService,
+        IChannelService channelService,
+        ILogger<ChatHub> logger)
     {
         _chatService = chatService;
         _messageService = messageService;
         _userService = userService;
         _reactionService = reactionService;
         _callService = callService;
+        _channelService = channelService;
+        _logger = logger;
     }
 
     private class ParticipantMediaState
@@ -45,12 +52,12 @@ public class ChatHub : Hub
         var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim))
         {
-            Console.WriteLine($"[GetUserId] User claim is null or empty. User: {Context.User}, Identity: {Context.User?.Identity?.Name}");
+            _logger.LogWarning("User claim is null or empty. Identity: {IdentityName}", Context.User?.Identity?.Name);
             throw new UnauthorizedAccessException("User ID claim not found");
         }
         if (!Guid.TryParse(userIdClaim, out var userId))
         {
-            Console.WriteLine($"[GetUserId] Failed to parse user ID: {userIdClaim}");
+            _logger.LogWarning("Failed to parse user ID: {UserIdClaim}", userIdClaim);
             throw new FormatException($"Invalid user ID format: {userIdClaim}");
         }
         return userId;
@@ -120,30 +127,13 @@ public class ChatHub : Hub
 
     public async Task SendMessage(SendMessageRequest request)
     {
-        try
-        {
-            Console.WriteLine($"[SendMessage] Received request - ChatId: {request.ChatId}, Content: {request.Content}, Type: {request.Type}");
-            var userId = GetUserId();
-            Console.WriteLine($"[SendMessage] UserId from token: {userId}");
+        var userId = GetUserId();
 
-            // Send message through service
-            var message = await _messageService.SendMessageAsync(userId, request);
-            Console.WriteLine($"[SendMessage] Message created with Id: {message.Id}");
+        // Send message through service
+        var message = await _messageService.SendMessageAsync(userId, request);
 
-            // Broadcast to all members of the chat
-            await Clients.Group($"chat_{request.ChatId}").SendAsync("ReceiveMessage", message);
-            Console.WriteLine($"[SendMessage] Message broadcasted to group: chat_{request.ChatId}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[SendMessage Error] {ex.GetType().Name}: {ex.Message}");
-            Console.WriteLine($"[SendMessage Stack] {ex.StackTrace}");
-            if (ex.InnerException != null)
-            {
-                Console.WriteLine($"[SendMessage Inner] {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
-            }
-            throw;
-        }
+        // Broadcast to all members of the chat
+        await Clients.Group($"chat_{request.ChatId}").SendAsync("ReceiveMessage", message);
     }
 
     public async Task EditMessage(Guid messageId, string content)
@@ -322,6 +312,109 @@ public class ChatHub : Hub
             return Enumerable.Empty<string>();
         }
     }
+
+    #region Channel Methods
+
+    public async Task JoinChannel(Guid channelId)
+    {
+        var userId = GetUserId();
+        var channel = await _channelService.GetChannelAsync(channelId, userId);
+
+        if (channel != null && channel.IsSubscribed)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"channel_{channelId}");
+        }
+    }
+
+    public async Task LeaveChannel(Guid channelId)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"channel_{channelId}");
+    }
+
+    public async Task SubscribeToChannel(Guid channelId)
+    {
+        var userId = GetUserId();
+
+        try
+        {
+            var channel = await _channelService.SubscribeAsync(channelId, userId);
+
+            // Join the channel group
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"channel_{channelId}");
+
+            // Also join the chat group for messages
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"chat_{channel.ChatId}");
+
+            // Notify other subscribers about the new subscriber count
+            await Clients.Group($"channel_{channelId}").SendAsync("SubscriberCountChanged", new
+            {
+                ChannelId = channelId,
+                SubscriberCount = channel.SubscriberCount
+            });
+
+            // Send subscription confirmation to caller
+            await Clients.Caller.SendAsync("ChannelSubscribed", channel);
+        }
+        catch (Exception ex)
+        {
+            await Clients.Caller.SendAsync("ChannelError", new { Message = ex.Message });
+        }
+    }
+
+    public async Task UnsubscribeFromChannel(Guid channelId)
+    {
+        var userId = GetUserId();
+
+        try
+        {
+            var channel = await _channelService.GetChannelAsync(channelId, userId);
+            var chatId = channel.ChatId;
+
+            await _channelService.UnsubscribeAsync(channelId, userId);
+
+            // Leave the channel group
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"channel_{channelId}");
+
+            // Leave the chat group
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"chat_{chatId}");
+
+            // Notify remaining subscribers about the new subscriber count
+            var updatedChannel = await _channelService.GetChannelAsync(channelId);
+            await Clients.Group($"channel_{channelId}").SendAsync("SubscriberCountChanged", new
+            {
+                ChannelId = channelId,
+                SubscriberCount = updatedChannel.SubscriberCount
+            });
+
+            // Send unsubscription confirmation to caller
+            await Clients.Caller.SendAsync("ChannelUnsubscribed", new { ChannelId = channelId });
+        }
+        catch (Exception ex)
+        {
+            await Clients.Caller.SendAsync("ChannelError", new { Message = ex.Message });
+        }
+    }
+
+    public async Task SendChannelMessage(SendMessageRequest request)
+    {
+        var userId = GetUserId();
+
+        // Check if user can post in channel
+        var canPost = await _channelService.CanPostByChatIdAsync(request.ChatId, userId);
+        if (!canPost)
+        {
+            await Clients.Caller.SendAsync("ChannelError", new { Message = "Only admins can post in channels" });
+            return;
+        }
+
+        // Send message through service
+        var message = await _messageService.SendMessageAsync(userId, request);
+
+        // Broadcast to all members of the chat (channel subscribers)
+        await Clients.Group($"chat_{request.ChatId}").SendAsync("ReceiveChannelMessage", message);
+    }
+
+    #endregion
 
     #region Call Signaling Methods
 

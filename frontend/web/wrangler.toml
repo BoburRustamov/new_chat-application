@@ -1,0 +1,17 @@
+# =============================================================================
+# CLOUDFLARE PAGES CONFIGURATION (Optional)
+# =============================================================================
+# This is optional - Cloudflare auto-detects Vite projects.
+# But this file gives you more control over the build.
+# =============================================================================
+
+name = "chatapp"
+compatibility_date = "2024-01-01"
+
+# Build configuration
+[build]
+command = "npm run build"
+cwd = "."
+
+[build.upload]
+dir = "dist"

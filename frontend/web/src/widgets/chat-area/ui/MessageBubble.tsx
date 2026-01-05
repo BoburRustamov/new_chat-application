@@ -11,8 +11,6 @@ interface MessageBubbleProps {
   onReply?: (message: Message) => void;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -75,7 +73,8 @@ export function MessageBubble({ message, showSender = false, onContextMenu, onRe
 
   const getFileUrl = (path: string) => {
     if (path.startsWith('http')) return path;
-    return `${API_BASE_URL}${path}`;
+    // Path already includes /api prefix, so use it directly for relative URLs
+    return path;
   };
 
   const renderContent = () => {

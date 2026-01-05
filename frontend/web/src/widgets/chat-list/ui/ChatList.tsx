@@ -12,7 +12,7 @@ export function ChatList({ searchQuery, onSearchChange }: ChatListProps) {
   const { chats, selectedChatId, isLoadingChats, loadChats, selectChat } = useChatStore();
 
   useEffect(() => {
-    loadChats();
+    loadChats().catch(err => console.error('Failed to load chats:', err));
   }, [loadChats]);
 
   const filteredChats = chats.filter((chat) => {

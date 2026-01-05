@@ -6,6 +6,7 @@ using ChatApp.Infrastructure.Data;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 
@@ -14,6 +15,7 @@ namespace ChatApp.Infrastructure.Services;
 public class FileService : IFileService
 {
     private readonly AppDbContext _context;
+    private readonly ILogger<FileService> _logger;
     private readonly string _uploadPath;
     private readonly string _thumbnailPath;
     private const long MaxFileSize = 100 * 1024 * 1024; // 100MB
@@ -49,9 +51,10 @@ public class FileService : IFileService
         "application/x-rar-compressed"
     };
 
-    public FileService(AppDbContext context, IConfiguration configuration)
+    public FileService(AppDbContext context, IConfiguration configuration, ILogger<FileService> logger)
     {
         _context = context;
+        _logger = logger;
         _uploadPath = configuration["FileStorage:UploadPath"] ?? Path.Combine(Directory.GetCurrentDirectory(), "uploads");
         _thumbnailPath = configuration["FileStorage:ThumbnailPath"] ?? Path.Combine(_uploadPath, "thumbnails");
 
@@ -187,9 +190,10 @@ public class FileService : IFileService
 
             fileEntity.ThumbnailPath = thumbnailFilePath;
         }
-        catch
+        catch (Exception ex)
         {
             // If image processing fails, continue without thumbnail
+            _logger.LogWarning(ex, "Failed to process image thumbnail for file {FileId}", fileEntity.Id);
         }
     }
 

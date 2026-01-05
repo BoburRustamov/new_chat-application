@@ -14,6 +14,16 @@ public class User
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
+    // Notification settings
+    public bool PushNotificationsEnabled { get; set; } = true;
+    public bool EmailNotificationsEnabled { get; set; } = false;
+    public bool SoundEnabled { get; set; } = true;
+
+    // Privacy settings
+    public bool ShowOnlineStatus { get; set; } = true;
+    public bool ShowLastSeen { get; set; } = true;
+    public bool ShowReadReceipts { get; set; } = true;
+
     // Navigation properties
     public ICollection<ChatMember> ChatMemberships { get; set; } = new List<ChatMember>();
     public ICollection<Message> Messages { get; set; } = new List<Message>();
@@ -23,4 +33,5 @@ public class User
     public ICollection<Call> InitiatedCalls { get; set; } = new List<Call>();
     public ICollection<CallParticipant> CallParticipations { get; set; } = new List<CallParticipant>();
     public ICollection<MessageRead> MessageReads { get; set; } = new List<MessageRead>();
+    public ICollection<DeletedMessage> DeletedMessages { get; set; } = new List<DeletedMessage>();
 }

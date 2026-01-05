@@ -1,28 +1,36 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, MessageCircle, Settings, Plus, Wifi, WifiOff } from 'lucide-react';
+import { LogOut, MessageCircle, Settings, Plus, Wifi, WifiOff, Megaphone, Compass } from 'lucide-react';
 import { useAuthStore } from '@/entities/user/model/authStore';
 import { useChatStore } from '@/entities/chat/model/chatStore';
 import { useCallStore } from '@/entities/call/model/callStore';
+import { useChannelStore } from '@/entities/channel';
 import { Button } from '@/shared/ui';
 import { ChatList } from '@/widgets/chat-list/ui/ChatList';
+import { ChannelList } from '@/widgets/channel-list';
 import { ChatHeader } from '@/widgets/chat-area/ui/ChatHeader';
 import { MessageList } from '@/widgets/chat-area/ui/MessageList';
 import { MessageInput } from '@/features/messaging/ui/MessageInput';
 import { NewChatModal } from '@/features/new-chat/ui/NewChatModal';
+import { CreateChannelModal } from '@/features/channel';
 import { CallOverlay, IncomingCallModal } from '@/features/call';
 import { PinnedMessagesPanel } from '@/widgets/chat-area/ui/PinnedMessagesPanel';
 import { MessageSearch } from '@/features/search';
 import type { Message } from '@/shared/types';
 
+type SidebarTab = 'chats' | 'channels';
+
 export function ChatPage() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [channelSearchQuery, setChannelSearchQuery] = useState('');
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [isCreateChannelModalOpen, setIsCreateChannelModalOpen] = useState(false);
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [isPinnedPanelOpen, setIsPinnedPanelOpen] = useState(false);
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<SidebarTab>('chats');
   const messageListRef = useRef<{ scrollToMessage: (id: string) => void } | null>(null);
 
   const {
@@ -33,6 +41,8 @@ export function ChatPage() {
     connectSignalR,
     disconnectSignalR
   } = useChatStore();
+
+  useChannelStore(); // Initialize channel store
 
   const {
     incomingCall,
@@ -70,6 +80,17 @@ export function ChatPage() {
   const handleCancelReply = useCallback(() => {
     setReplyToMessage(null);
   }, []);
+
+  const handleChannelSelect = useCallback((_channelId: string, chatId: string) => {
+    selectChat(chatId);
+    navigate(`/chat/${chatId}`);
+  }, [selectChat, navigate]);
+
+  const handleChannelCreated = useCallback((_channelId: string, chatId: string) => {
+    selectChat(chatId);
+    navigate(`/chat/${chatId}`);
+    setActiveTab('channels');
+  }, [selectChat, navigate]);
 
   // Connect to SignalR on mount
   useEffect(() => {
@@ -134,17 +155,65 @@ export function ChatPage() {
             <div title={connectionStatus}>{getConnectionIcon()}</div>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={() => setIsNewChatModalOpen(true)}>
-              <Plus className="h-5 w-5" />
-            </Button>
             <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
               <Settings className="h-5 w-5" />
             </Button>
           </div>
         </div>
 
-        {/* Chat List */}
-        <ChatList searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+        {/* Tabs */}
+        <div className="flex border-b border-[hsl(var(--border))]">
+          <button
+            onClick={() => setActiveTab('chats')}
+            className={`flex flex-1 items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'chats'
+                ? 'border-b-2 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
+                : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+            }`}
+          >
+            <MessageCircle className="h-4 w-4" />
+            Chats
+          </button>
+          <button
+            onClick={() => setActiveTab('channels')}
+            className={`flex flex-1 items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'channels'
+                ? 'border-b-2 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
+                : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+            }`}
+          >
+            <Megaphone className="h-4 w-4" />
+            Channels
+          </button>
+        </div>
+
+        {/* Chat List or Channel List */}
+        {activeTab === 'chats' ? (
+          <>
+            <div className="flex items-center justify-end px-3 pt-2">
+              <Button variant="ghost" size="sm" onClick={() => setIsNewChatModalOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" />
+                New Chat
+              </Button>
+            </div>
+            <ChatList searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-end gap-2 px-3 pt-2">
+              <Button variant="ghost" size="sm" onClick={() => navigate('/channels/discover')}>
+                <Compass className="mr-1 h-4 w-4" />
+                Discover
+              </Button>
+            </div>
+            <ChannelList
+              searchQuery={channelSearchQuery}
+              onSearchChange={setChannelSearchQuery}
+              onCreateClick={() => setIsCreateChannelModalOpen(true)}
+              onChannelSelect={handleChannelSelect}
+            />
+          </>
+        )}
 
         {/* Sidebar Footer - User Info */}
         <div className="border-t border-[hsl(var(--border))] p-4">
@@ -231,6 +300,13 @@ export function ChatPage() {
 
       {/* New Chat Modal */}
       <NewChatModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} />
+
+      {/* Create Channel Modal */}
+      <CreateChannelModal
+        isOpen={isCreateChannelModalOpen}
+        onClose={() => setIsCreateChannelModalOpen(false)}
+        onSuccess={handleChannelCreated}
+      />
 
       {/* Call Overlay - shown when in a call */}
       {callState !== 'idle' && <CallOverlay />}

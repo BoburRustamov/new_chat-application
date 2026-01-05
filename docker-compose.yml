@@ -1,0 +1,108 @@
+# =============================================================================
+# DOCKER COMPOSE - Run Everything Locally
+# =============================================================================
+# Docker Compose lets you run multiple containers together with one command.
+#
+# USAGE:
+#   docker-compose up        # Start all services
+#   docker-compose up -d     # Start in background (detached)
+#   docker-compose down      # Stop all services
+#   docker-compose logs -f   # View logs
+#
+# WHAT THIS RUNS:
+#   - PostgreSQL database (port 5432)
+#   - Backend API (port 5004)
+#   - Frontend (port 3000)
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # DATABASE - PostgreSQL
+  # ---------------------------------------------------------------------------
+  # This is where all your chat data is stored
+  database:
+    image: postgres:16-alpine
+    container_name: chatapp-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chatapp
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persist data even when container is removed
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # BACKEND - ASP.NET Core API
+  # ---------------------------------------------------------------------------
+  # Your .NET backend with SignalR for real-time chat
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chatapp-backend
+    restart: unless-stopped
+    ports:
+      - "5004:8080"
+    environment:
+      # Database connection
+      ConnectionStrings__DefaultConnection: "Host=database;Port=5432;Database=chatapp;Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-postgres}"
+      # JWT settings
+      Jwt__SecretKey: ${JWT_SECRET:-YourSuperSecretKeyThatIsAtLeast32CharactersLong!}
+      Jwt__Issuer: ChatApp
+      Jwt__Audience: ChatApp
+      Jwt__ExpirationMinutes: 60
+      Jwt__RefreshTokenExpirationDays: 7
+      # CORS - allow frontend
+      Cors__AllowedOrigins__0: http://localhost:3000
+      Cors__AllowedOrigins__1: http://localhost:5173
+      # File storage
+      FileStorage__BasePath: /app/uploads
+      FileStorage__MaxFileSizeBytes: 104857600
+      # Admin credentials
+      Admin__Username: ${ADMIN_USERNAME:-admin}
+      Admin__Password: ${ADMIN_PASSWORD:-admin123}
+    volumes:
+      # Persist uploaded files
+      - uploads_data:/app/uploads
+    depends_on:
+      database:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # FRONTEND - React Application
+  # ---------------------------------------------------------------------------
+  # Your React frontend served by nginx
+  frontend:
+    build:
+      context: ./frontend/web
+      dockerfile: Dockerfile
+      args:
+        # These are passed to the build process
+        VITE_API_URL: http://localhost:5004/api
+        VITE_HUB_URL: http://localhost:5004/hubs/chat
+    container_name: chatapp-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+# -----------------------------------------------------------------------------
+# VOLUMES - Persistent Storage
+# -----------------------------------------------------------------------------
+# Docker volumes persist data even when containers are removed
+volumes:
+  postgres_data:
+    name: chatapp-postgres-data
+  uploads_data:
+    name: chatapp-uploads

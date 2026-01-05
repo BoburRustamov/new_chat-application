@@ -11,4 +11,14 @@ public class UserDto
     public bool IsOnline { get; set; }
     public DateTime? LastSeenAt { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    // Notification settings
+    public bool PushNotificationsEnabled { get; set; } = true;
+    public bool EmailNotificationsEnabled { get; set; } = false;
+    public bool SoundEnabled { get; set; } = true;
+
+    // Privacy settings
+    public bool ShowOnlineStatus { get; set; } = true;
+    public bool ShowLastSeen { get; set; } = true;
+    public bool ShowReadReceipts { get; set; } = true;
 }

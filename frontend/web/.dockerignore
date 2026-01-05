@@ -1,0 +1,38 @@
+# =============================================================================
+# DOCKER IGNORE - Frontend
+# =============================================================================
+# Files to exclude from Docker build context
+# =============================================================================
+
+# Dependencies (installed during build)
+node_modules/
+
+# Build output (created during build)
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+e2e/
+playwright-report/
+test-results/
+
+# Environment files (use build args instead)
+.env
+.env.local
+.env.*.local
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore

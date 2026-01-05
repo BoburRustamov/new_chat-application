@@ -83,4 +83,28 @@ public class ChatsController : ControllerBase
         await _chatService.RemoveMemberAsync(id, userId, userId);
         return NoContent();
     }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ChatDto>> UpdateChat(Guid id, [FromBody] UpdateChatRequest request)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _chatService.UpdateChatAsync(id, userId, request.Name, request.Description, request.AvatarFileId);
+        return Ok(chat);
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteChat(Guid id)
+    {
+        var userId = GetCurrentUserId();
+        await _chatService.DeleteChatAsync(id, userId);
+        return NoContent();
+    }
+
+    [HttpPost("{id:guid}/mute")]
+    public async Task<IActionResult> MuteChat(Guid id, [FromBody] MuteChatRequest request)
+    {
+        var userId = GetCurrentUserId();
+        await _chatService.SetMutedAsync(id, userId, request.Muted);
+        return NoContent();
+    }
 }

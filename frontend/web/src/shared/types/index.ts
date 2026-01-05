@@ -267,3 +267,79 @@ export interface MessageForwardedEvent {
   chatId: string;
   message: Message;
 }
+
+// Channel Types
+export type MemberRole = 'Owner' | 'Admin' | 'Moderator' | 'Member';
+
+export interface Channel {
+  id: string;
+  chatId: string;
+  name: string;
+  description?: string;
+  username: string;
+  avatarUrl?: string;
+  isPublic: boolean;
+  subscriberCount: number;
+  createdAt: string;
+  createdBy?: User;
+  isSubscribed: boolean;
+  userRole?: MemberRole;
+}
+
+export interface ChannelSearchResult {
+  id: string;
+  name: string;
+  username: string;
+  avatarUrl?: string;
+  subscriberCount: number;
+  description?: string;
+}
+
+export interface ChannelInviteLink {
+  channelId: string;
+  inviteCode: string;
+  inviteLink: string;
+  createdAt: string;
+  expiresAt?: string;
+  usageLimit?: number;
+  usageCount: number;
+}
+
+export interface CreateChannelRequest {
+  name: string;
+  description?: string;
+  username: string;
+  isPublic: boolean;
+  avatarFileId?: string;
+}
+
+export interface UpdateChannelRequest {
+  name?: string;
+  description?: string;
+  username?: string;
+  isPublic?: boolean;
+  avatarFileId?: string;
+}
+
+export interface GenerateInviteLinkRequest {
+  expiresInHours?: number;
+  usageLimit?: number;
+}
+
+// Channel SignalR Events
+export interface SubscriberCountChangedEvent {
+  channelId: string;
+  subscriberCount: number;
+}
+
+export interface ChannelSubscribedEvent {
+  channel: Channel;
+}
+
+export interface ChannelUnsubscribedEvent {
+  channelId: string;
+}
+
+export interface ChannelErrorEvent {
+  message: string;
+}

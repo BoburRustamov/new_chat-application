@@ -13,10 +13,12 @@ namespace ChatApp.API.Controllers;
 public class MessagesController : ControllerBase
 {
     private readonly IMessageService _messageService;
+    private readonly IChannelService _channelService;
 
-    public MessagesController(IMessageService messageService)
+    public MessagesController(IMessageService messageService, IChannelService channelService)
     {
         _messageService = messageService;
+        _channelService = channelService;
     }
 
     private Guid GetCurrentUserId()
@@ -52,6 +54,14 @@ public class MessagesController : ControllerBase
     public async Task<ActionResult<MessageDto>> SendMessage([FromBody] SendMessageRequest request)
     {
         var userId = GetCurrentUserId();
+
+        // Check if this is a channel and if user can post
+        var canPost = await _channelService.CanPostByChatIdAsync(request.ChatId, userId);
+        if (!canPost)
+        {
+            return Forbid("Only admins can post in channels");
+        }
+
         var message = await _messageService.SendMessageAsync(userId, request);
         return CreatedAtAction(nameof(GetMessage), new { id = message.Id }, message);
     }

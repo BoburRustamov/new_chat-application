@@ -239,6 +239,12 @@ public class CallParticipantConfiguration : IEntityTypeConfiguration<CallPartici
         builder.Property(cp => cp.Id)
             .HasDefaultValueSql("gen_random_uuid()");
 
+        builder.Property(cp => cp.IsMuted)
+            .HasDefaultValue(false);
+
+        builder.Property(cp => cp.IsVideoOn)
+            .HasDefaultValue(false);
+
         builder.HasOne(cp => cp.Call)
             .WithMany(c => c.Participants)
             .HasForeignKey(cp => cp.CallId)
@@ -266,12 +272,19 @@ public class ChannelConfiguration : IEntityTypeConfiguration<Channel>
             .HasDefaultValueSql("gen_random_uuid()");
 
         builder.Property(c => c.Username)
-            .HasMaxLength(50);
+            .HasMaxLength(32);
 
         builder.Property(c => c.IsPublic)
             .HasDefaultValue(true);
 
         builder.Property(c => c.SubscriberCount)
+            .HasDefaultValue(0);
+
+        // Invite link properties
+        builder.Property(c => c.InviteCode)
+            .HasMaxLength(32);
+
+        builder.Property(c => c.InviteUsageCount)
             .HasDefaultValue(0);
 
         builder.HasOne(c => c.Chat)
@@ -281,6 +294,8 @@ public class ChannelConfiguration : IEntityTypeConfiguration<Channel>
 
         builder.HasIndex(c => c.ChatId).IsUnique();
         builder.HasIndex(c => c.Username).IsUnique();
+        builder.HasIndex(c => c.InviteCode).IsUnique();
+        builder.HasIndex(c => c.IsPublic);
     }
 }
 
@@ -309,5 +324,32 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
 
         builder.HasIndex(rt => rt.Token).IsUnique();
         builder.HasIndex(rt => rt.UserId);
+    }
+}
+
+public class DeletedMessageConfiguration : IEntityTypeConfiguration<DeletedMessage>
+{
+    public void Configure(EntityTypeBuilder<DeletedMessage> builder)
+    {
+        builder.ToTable("DeletedMessages");
+
+        builder.HasKey(dm => dm.Id);
+
+        builder.Property(dm => dm.Id)
+            .HasDefaultValueSql("gen_random_uuid()");
+
+        builder.HasOne(dm => dm.Message)
+            .WithMany(m => m.DeletedByUsers)
+            .HasForeignKey(dm => dm.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(dm => dm.User)
+            .WithMany(u => u.DeletedMessages)
+            .HasForeignKey(dm => dm.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(dm => dm.MessageId);
+        builder.HasIndex(dm => dm.UserId);
+        builder.HasIndex(dm => new { dm.MessageId, dm.UserId }).IsUnique();
     }
 }

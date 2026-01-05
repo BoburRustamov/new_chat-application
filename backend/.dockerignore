@@ -1,0 +1,44 @@
+# =============================================================================
+# DOCKER IGNORE - Backend
+# =============================================================================
+# Files to exclude from Docker build context (faster builds, smaller images)
+# =============================================================================
+
+# Build outputs
+**/bin/
+**/obj/
+**/out/
+
+# IDE files
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet packages (restored during build)
+**/packages/
+
+# Test results
+**/TestResults/
+
+# Local uploads (not needed in build)
+**/uploads/
+
+# Logs
+*.log
+logs/
+
+# Documentation
+*.md
+!README.md
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml

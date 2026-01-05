@@ -24,6 +24,12 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
+        // Validate password length (match frontend validation)
+        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 6)
+        {
+            throw new BadRequestException("Password must be at least 6 characters");
+        }
+
         // Check if email already exists
         if (await _context.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower()))
         {

@@ -43,4 +43,5 @@ public class Message
     public ICollection<Message> Replies { get; set; } = new List<Message>();
     public ICollection<Reaction> Reactions { get; set; } = new List<Reaction>();
     public ICollection<MessageRead> Reads { get; set; } = new List<MessageRead>();
+    public ICollection<DeletedMessage> DeletedByUsers { get; set; } = new List<DeletedMessage>();
 }

@@ -26,6 +26,8 @@ public static class ServiceExtensions
         services.AddScoped<IFileService, FileService>();
         services.AddScoped<IReactionService, ReactionService>();
         services.AddScoped<ICallService, CallService>();
+        services.AddScoped<IAdminService, AdminService>();
+        services.AddScoped<IChannelService, ChannelService>();
 
         return services;
     }

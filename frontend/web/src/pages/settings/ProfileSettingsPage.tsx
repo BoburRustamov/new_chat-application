@@ -1,10 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Camera, Loader2, Save, User, Mail, AtSign, Bell, Moon, Globe, Lock, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/entities/user/model/authStore';
 import { Button } from '@/shared/ui';
 import { apiClient } from '@/shared/api/client';
-import type { FileInfo } from '@/shared/types';
+import type { FileInfo, User as UserType } from '@/shared/types';
 
 interface ProfileFormData {
   displayName: string;
@@ -24,6 +24,15 @@ interface PrivacySettings {
   showReadReceipts: boolean;
 }
 
+interface UserSettings extends UserType {
+  pushNotificationsEnabled?: boolean;
+  emailNotificationsEnabled?: boolean;
+  soundEnabled?: boolean;
+  showOnlineStatus?: boolean;
+  showLastSeen?: boolean;
+  showReadReceipts?: boolean;
+}
+
 export function ProfileSettingsPage() {
   const navigate = useNavigate();
   const { user, logout, updateProfile } = useAuthStore();
@@ -31,6 +40,7 @@ export function ProfileSettingsPage() {
 
   const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'privacy' | 'appearance'>('profile');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -38,7 +48,7 @@ export function ProfileSettingsPage() {
   // Profile form state
   const [profileData, setProfileData] = useState<ProfileFormData>({
     displayName: user?.displayName || '',
-    bio: '',
+    bio: user?.bio || '',
     email: user?.email || '',
   });
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl || null);
@@ -60,6 +70,44 @@ export function ProfileSettingsPage() {
 
   // Theme settings
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
+
+  // Load current user settings on mount
+  useEffect(() => {
+    const loadUserSettings = async () => {
+      try {
+        const response = await apiClient.get<UserSettings>('/users/me');
+        const userData = response.data;
+
+        // Update profile data
+        setProfileData({
+          displayName: userData.displayName || '',
+          bio: userData.bio || '',
+          email: userData.email || '',
+        });
+        setAvatarPreview(userData.avatarUrl || null);
+
+        // Update notification settings
+        setNotifications({
+          pushEnabled: userData.pushNotificationsEnabled ?? true,
+          emailEnabled: userData.emailNotificationsEnabled ?? false,
+          soundEnabled: userData.soundEnabled ?? true,
+        });
+
+        // Update privacy settings
+        setPrivacy({
+          showOnlineStatus: userData.showOnlineStatus ?? true,
+          showLastSeen: userData.showLastSeen ?? true,
+          showReadReceipts: userData.showReadReceipts ?? true,
+        });
+      } catch (err) {
+        console.error('Failed to load user settings:', err);
+      } finally {
+        setIsLoadingSettings(false);
+      }
+    };
+
+    loadUserSettings();
+  }, []);
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -146,6 +194,7 @@ export function ProfileSettingsPage() {
   };
 
   const handleLogout = async () => {
+    if (!confirm('Are you sure you want to log out?')) return;
     await logout();
     navigate('/');
   };
@@ -202,6 +251,13 @@ export function ProfileSettingsPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto p-8">
+          {/* Loading state */}
+          {isLoadingSettings ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--muted-foreground))]" />
+            </div>
+          ) : (
+            <>
           {/* Status messages */}
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-500/10 text-red-500 text-sm">
@@ -431,6 +487,8 @@ export function ProfileSettingsPage() {
                 </div>
               </div>
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

@@ -13,7 +13,7 @@ interface MessageSearchProps {
 }
 
 interface SearchResult {
-  messages: Message[];
+  items: Message[];
   totalCount: number;
 }
 
@@ -62,7 +62,7 @@ export function MessageSearch({ chatId, isOpen, onClose, onNavigateToMessage }: 
         `/messages/chat/${chatId}/search`,
         { query: searchQuery.trim(), limit: 50 }
       );
-      setResults(response.data.messages);
+      setResults(response.data.items);
       setTotalCount(response.data.totalCount);
       setCurrentIndex(0);
     } catch (error) {

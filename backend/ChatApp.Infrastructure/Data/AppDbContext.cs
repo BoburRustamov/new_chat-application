@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<CallParticipant> CallParticipants => Set<CallParticipant>();
     public DbSet<Channel> Channels => Set<Channel>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<DeletedMessage> DeletedMessages => Set<DeletedMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

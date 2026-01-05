@@ -54,6 +54,13 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
   const startRecording = async () => {
     try {
       setError(null);
+
+      // Check browser support
+      if (!navigator.mediaDevices || !window.MediaRecorder) {
+        setError('Voice recording is not supported in this browser');
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 

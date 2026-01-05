@@ -15,7 +15,11 @@ export function CallButton({ chatId, type, disabled }: CallButtonProps) {
 
   const handleClick = async () => {
     if (isInCall || disabled) return;
-    await initiateCall(chatId, type);
+    try {
+      await initiateCall(chatId, type);
+    } catch (err) {
+      console.error('Failed to start call:', err);
+    }
   };
 
   return (

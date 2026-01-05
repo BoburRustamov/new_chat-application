@@ -43,11 +43,11 @@ class ApiClient {
               return this.client(originalRequest);
             } catch {
               this.clearTokens();
-              window.location.href = '/login';
+              window.location.href = '/';
             }
           } else {
             this.clearTokens();
-            window.location.href = '/login';
+            window.location.href = '/';
           }
         }
 

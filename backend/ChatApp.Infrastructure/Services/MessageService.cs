@@ -27,6 +27,7 @@ public class MessageService : IMessageService
             .Include(m => m.ReplyTo)
                 .ThenInclude(r => r!.Sender)
             .Include(m => m.Reactions)
+            .Include(m => m.Reads)
             .FirstOrDefaultAsync(m => m.Id == messageId);
 
         if (message == null) return null;
@@ -35,7 +36,7 @@ public class MessageService : IMessageService
         if (!await _chatService.IsMemberAsync(message.ChatId, userId))
             return null;
 
-        return MapToDto(message);
+        return MapToDto(message, userId);
     }
 
     public async Task<PagedResponse<MessageDto>> GetChatMessagesAsync(Guid chatId, Guid userId, int page = 1, int pageSize = 50)
@@ -46,13 +47,20 @@ public class MessageService : IMessageService
             throw new ForbiddenException("You are not a member of this chat");
         }
 
+        // Get IDs of messages deleted by this user (delete for me)
+        var userDeletedMessageIds = await _context.DeletedMessages
+            .Where(dm => dm.UserId == userId)
+            .Select(dm => dm.MessageId)
+            .ToListAsync();
+
         var messagesQuery = _context.Messages
             .Include(m => m.Sender)
             .Include(m => m.File)
             .Include(m => m.ReplyTo)
                 .ThenInclude(r => r!.Sender)
             .Include(m => m.Reactions)
-            .Where(m => m.ChatId == chatId)
+            .Include(m => m.Reads)
+            .Where(m => m.ChatId == chatId && !userDeletedMessageIds.Contains(m.Id))
             .OrderByDescending(m => m.CreatedAt);
 
         var totalCount = await messagesQuery.CountAsync();
@@ -67,7 +75,7 @@ public class MessageService : IMessageService
 
         return new PagedResponse<MessageDto>
         {
-            Items = messages.Select(MapToDto).ToList(),
+            Items = messages.Select(m => MapToDto(m, userId)).ToList(),
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount
@@ -124,9 +132,10 @@ public class MessageService : IMessageService
             .Include(m => m.File)
             .Include(m => m.ReplyTo)
                 .ThenInclude(r => r!.Sender)
+            .Include(m => m.Reads)
             .FirstAsync(m => m.Id == message.Id);
 
-        return MapToDto(createdMessage);
+        return MapToDto(createdMessage, senderId);
     }
 
     public async Task<MessageDto> UpdateMessageAsync(Guid messageId, Guid userId, string content)
@@ -169,9 +178,10 @@ public class MessageService : IMessageService
             .Include(m => m.ReplyTo)
                 .ThenInclude(r => r!.Sender)
             .Include(m => m.Reactions)
+            .Include(m => m.Reads)
             .FirstAsync(m => m.Id == messageId);
 
-        return MapToDto(updatedMessage);
+        return MapToDto(updatedMessage, userId);
     }
 
     public async Task DeleteMessageAsync(Guid messageId, Guid userId, bool deleteForEveryone = true)
@@ -192,17 +202,17 @@ public class MessageService : IMessageService
             throw new ForbiddenException("You are not a member of this chat");
         }
 
-        // Check if user can delete this message
-        var isOwner = message.SenderId == userId;
-        var isAdmin = member.Role == MemberRole.Owner || member.Role == MemberRole.Admin;
-
-        if (!isOwner && !isAdmin)
-        {
-            throw new ForbiddenException("You can only delete your own messages");
-        }
-
         if (deleteForEveryone)
         {
+            // Check if user can delete for everyone
+            var isOwner = message.SenderId == userId;
+            var isAdmin = member.Role == MemberRole.Owner || member.Role == MemberRole.Admin;
+
+            if (!isOwner && !isAdmin)
+            {
+                throw new ForbiddenException("You can only delete your own messages for everyone");
+            }
+
             message.IsDeleted = true;
             message.DeletedAt = DateTime.UtcNow;
             message.DeletedById = userId;
@@ -210,11 +220,21 @@ public class MessageService : IMessageService
         }
         else
         {
-            // For "delete for me" - we would need a separate table
-            // For now, just mark as deleted
-            message.IsDeleted = true;
-            message.DeletedAt = DateTime.UtcNow;
-            message.DeletedById = userId;
+            // Delete for me - add record to DeletedMessages table
+            var existingDelete = await _context.DeletedMessages
+                .FirstOrDefaultAsync(dm => dm.MessageId == messageId && dm.UserId == userId);
+
+            if (existingDelete == null)
+            {
+                var deletedMessage = new DeletedMessage
+                {
+                    Id = Guid.NewGuid(),
+                    MessageId = messageId,
+                    UserId = userId,
+                    DeletedAt = DateTime.UtcNow
+                };
+                _context.DeletedMessages.Add(deletedMessage);
+            }
         }
 
         await _context.SaveChangesAsync();
@@ -230,9 +250,22 @@ public class MessageService : IMessageService
             throw new ForbiddenException("You are not a member of this chat");
         }
 
+        // Get messages to mark as read
+        var messagesToMarkQuery = _context.Messages
+            .Where(m => m.ChatId == chatId && m.SenderId != userId);
+
         if (upToMessageId.HasValue)
         {
-            member.LastReadMessageId = upToMessageId;
+            // Get the target message's creation time
+            var targetMessage = await _context.Messages
+                .FirstOrDefaultAsync(m => m.Id == upToMessageId);
+
+            if (targetMessage != null)
+            {
+                messagesToMarkQuery = messagesToMarkQuery
+                    .Where(m => m.CreatedAt <= targetMessage.CreatedAt);
+                member.LastReadMessageId = upToMessageId;
+            }
         }
         else
         {
@@ -246,6 +279,33 @@ public class MessageService : IMessageService
             {
                 member.LastReadMessageId = latestMessage.Id;
             }
+        }
+
+        // Get message IDs that need to be marked as read
+        var messageIds = await messagesToMarkQuery
+            .Select(m => m.Id)
+            .ToListAsync();
+
+        // Get existing read records for this user
+        var existingReads = await _context.MessageReads
+            .Where(mr => messageIds.Contains(mr.MessageId) && mr.UserId == userId)
+            .Select(mr => mr.MessageId)
+            .ToListAsync();
+
+        // Create read records for messages not yet marked as read
+        var newReads = messageIds
+            .Where(id => !existingReads.Contains(id))
+            .Select(id => new MessageRead
+            {
+                MessageId = id,
+                UserId = userId,
+                ReadAt = DateTime.UtcNow
+            })
+            .ToList();
+
+        if (newReads.Any())
+        {
+            _context.MessageReads.AddRange(newReads);
         }
 
         member.LastReadAt = DateTime.UtcNow;
@@ -307,9 +367,10 @@ public class MessageService : IMessageService
             .Include(m => m.ReplyTo)
                 .ThenInclude(r => r!.Sender)
             .Include(m => m.Reactions)
+            .Include(m => m.Reads)
             .FirstAsync(m => m.Id == messageId);
 
-        return MapToDto(pinnedMessage);
+        return MapToDto(pinnedMessage, userId);
     }
 
     public async Task<MessageDto> UnpinMessageAsync(Guid messageId, Guid userId)
@@ -348,9 +409,10 @@ public class MessageService : IMessageService
             .Include(m => m.ReplyTo)
                 .ThenInclude(r => r!.Sender)
             .Include(m => m.Reactions)
+            .Include(m => m.Reads)
             .FirstAsync(m => m.Id == messageId);
 
-        return MapToDto(unpinnedMessage);
+        return MapToDto(unpinnedMessage, userId);
     }
 
     public async Task<List<MessageDto>> GetPinnedMessagesAsync(Guid chatId, Guid userId)
@@ -366,11 +428,12 @@ public class MessageService : IMessageService
             .Include(m => m.ReplyTo)
                 .ThenInclude(r => r!.Sender)
             .Include(m => m.Reactions)
+            .Include(m => m.Reads)
             .Where(m => m.ChatId == chatId && m.IsPinned && !m.IsDeleted)
             .OrderByDescending(m => m.PinnedAt)
             .ToListAsync();
 
-        return pinnedMessages.Select(MapToDto).ToList();
+        return pinnedMessages.Select(m => MapToDto(m, userId)).ToList();
     }
 
     public async Task<PagedResponse<MessageDto>> SearchMessagesAsync(Guid chatId, Guid userId, string query, int page = 1, int pageSize = 20)
@@ -399,6 +462,7 @@ public class MessageService : IMessageService
             .Include(m => m.ReplyTo)
                 .ThenInclude(r => r!.Sender)
             .Include(m => m.Reactions)
+            .Include(m => m.Reads)
             .Where(m => m.ChatId == chatId &&
                        !m.IsDeleted &&
                        m.Content != null &&
@@ -414,7 +478,7 @@ public class MessageService : IMessageService
 
         return new PagedResponse<MessageDto>
         {
-            Items = messages.Select(MapToDto).ToList(),
+            Items = messages.Select(m => MapToDto(m, userId)).ToList(),
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount
@@ -471,13 +535,30 @@ public class MessageService : IMessageService
             .Include(m => m.File)
             .Include(m => m.ForwardedFrom)
                 .ThenInclude(f => f!.Sender)
+            .Include(m => m.Reads)
             .FirstAsync(m => m.Id == forwardedMessage.Id);
 
-        return MapToDto(createdMessage);
+        return MapToDto(createdMessage, userId);
     }
 
-    private static MessageDto MapToDto(Message message)
+    private static MessageDto MapToDto(Message message, Guid? currentUserId = null)
     {
+        // Calculate message status
+        var status = MessageStatus.Sent;
+        if (currentUserId.HasValue && message.SenderId == currentUserId.Value)
+        {
+            // For messages sent by current user, check if others have read it
+            if (message.Reads != null && message.Reads.Any(r => r.UserId != currentUserId.Value))
+            {
+                status = MessageStatus.Read;
+            }
+            else
+            {
+                // For now, mark as Delivered if message was sent (could be enhanced with actual delivery tracking)
+                status = MessageStatus.Delivered;
+            }
+        }
+
         var dto = new MessageDto
         {
             Id = message.Id,
@@ -496,7 +577,7 @@ public class MessageService : IMessageService
             IsPinned = message.IsPinned,
             CreatedAt = message.CreatedAt,
             UpdatedAt = message.UpdatedAt,
-            Status = MessageStatus.Sent
+            Status = status
         };
 
         if (message.File != null)

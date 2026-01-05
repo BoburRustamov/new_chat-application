@@ -276,7 +276,7 @@ export function MessageInput({ chatId, replyToMessage, onCancelReply }: MessageI
     try {
       await sendMessage({
         chatId,
-        type: 'Audio',
+        type: 'Voice',
         fileId: fileInfo.id,
         replyToId: replyToMessage?.id,
       });

@@ -200,6 +200,12 @@ public class ChatService : IChatService
             throw new ForbiddenException("You are not a member of this chat");
         }
 
+        // Only owner or admin can add members
+        if (addedByMember.Role != MemberRole.Owner && addedByMember.Role != MemberRole.Admin)
+        {
+            throw new ForbiddenException("You don't have permission to add members");
+        }
+
         if (chat.Members.Any(m => m.UserId == userId))
         {
             throw new ConflictException("User is already a member");
@@ -281,6 +287,109 @@ public class ChatService : IChatService
             member.LastReadAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }
+    }
+
+    public async Task<ChatDto> UpdateChatAsync(Guid chatId, Guid userId, string? name, string? description, Guid? avatarFileId)
+    {
+        var chat = await _context.Chats
+            .Include(c => c.Members)
+            .FirstOrDefaultAsync(c => c.Id == chatId);
+
+        if (chat == null)
+        {
+            throw new NotFoundException("Chat not found");
+        }
+
+        if (chat.Type == ChatType.Private)
+        {
+            throw new BadRequestException("Cannot update private chat settings");
+        }
+
+        var member = chat.Members.FirstOrDefault(m => m.UserId == userId);
+        if (member == null || member.IsBanned)
+        {
+            throw new ForbiddenException("You are not a member of this chat");
+        }
+
+        if (member.Role != MemberRole.Owner && member.Role != MemberRole.Admin)
+        {
+            throw new ForbiddenException("You don't have permission to update chat settings");
+        }
+
+        if (name != null)
+        {
+            chat.Name = name;
+        }
+
+        if (description != null)
+        {
+            chat.Description = description;
+        }
+
+        if (avatarFileId.HasValue)
+        {
+            var file = await _context.Files.FindAsync(avatarFileId.Value);
+            if (file != null)
+            {
+                chat.AvatarUrl = $"/api/files/{file.Id}/download";
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        return (await GetByIdAsync(chatId, userId))!;
+    }
+
+    public async Task DeleteChatAsync(Guid chatId, Guid userId)
+    {
+        var chat = await _context.Chats
+            .Include(c => c.Members)
+            .FirstOrDefaultAsync(c => c.Id == chatId);
+
+        if (chat == null)
+        {
+            throw new NotFoundException("Chat not found");
+        }
+
+        var member = chat.Members.FirstOrDefault(m => m.UserId == userId);
+        if (member == null)
+        {
+            throw new ForbiddenException("You are not a member of this chat");
+        }
+
+        // For private chats, any member can delete
+        // For group chats, only owner can delete
+        if (chat.Type == ChatType.Group && member.Role != MemberRole.Owner)
+        {
+            throw new ForbiddenException("Only the owner can delete this chat");
+        }
+
+        _context.Chats.Remove(chat);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task SetMutedAsync(Guid chatId, Guid userId, bool muted)
+    {
+        var member = await _context.ChatMembers
+            .FirstOrDefaultAsync(m => m.ChatId == chatId && m.UserId == userId);
+
+        if (member == null)
+        {
+            throw new ForbiddenException("You are not a member of this chat");
+        }
+
+        member.IsMuted = muted;
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<int> GetTotalChatsCountAsync()
+    {
+        return await _context.Chats.CountAsync();
+    }
+
+    public async Task<long> GetTotalMessagesCountAsync()
+    {
+        return await _context.Messages.LongCountAsync();
     }
 
     private ChatDto MapToDto(Chat chat, Guid currentUserId)

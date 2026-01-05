@@ -1,0 +1,73 @@
+# =============================================================================
+# RENDER.COM CONFIGURATION
+# =============================================================================
+# This file tells Render.com how to deploy your backend.
+#
+# WHAT IS RENDER.COM?
+# A cloud platform that hosts your backend for free (with limitations).
+# Free tier: 750 hours/month, sleeps after 15 min inactivity.
+#
+# HOW TO USE:
+# 1. Push your code to GitHub
+# 2. Go to render.com and sign up
+# 3. Create "New Web Service" from your GitHub repo
+# 4. Render will automatically detect this file
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # BACKEND API
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: chatapp-api
+    runtime: docker
+    # Path to Dockerfile relative to repo root
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    # Region (Oregon is usually fastest for free tier)
+    region: oregon
+    # Free tier plan
+    plan: free
+    # Health check endpoint
+    healthCheckPath: /health
+    # Environment variables (set these in Render dashboard)
+    envVars:
+      # Database - use Neon.tech free PostgreSQL
+      - key: ConnectionStrings__DefaultConnection
+        sync: false  # Set manually in dashboard
+      # JWT Secret - generate a secure random string
+      - key: Jwt__SecretKey
+        sync: false
+      - key: Jwt__Issuer
+        value: ChatApp
+      - key: Jwt__Audience
+        value: ChatApp
+      - key: Jwt__ExpirationMinutes
+        value: 60
+      - key: Jwt__RefreshTokenExpirationDays
+        value: 7
+      # CORS - your Cloudflare Pages URL
+      - key: Cors__AllowedOrigins__0
+        sync: false  # Set to your frontend URL
+      # File storage
+      - key: FileStorage__BasePath
+        value: /app/uploads
+      - key: FileStorage__MaxFileSizeBytes
+        value: 104857600
+      # Admin credentials
+      - key: Admin__Username
+        sync: false
+      - key: Admin__Password
+        sync: false
+
+# =============================================================================
+# NOTE ABOUT DATABASE
+# =============================================================================
+# Render's free PostgreSQL expires after 30 days!
+# Instead, use Neon.tech (free forever, 0.5GB limit)
+#
+# 1. Go to neon.tech and create free account
+# 2. Create a new project
+# 3. Copy the connection string
+# 4. Paste it in Render's environment variables
+# =============================================================================

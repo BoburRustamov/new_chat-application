@@ -1,0 +1,47 @@
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background-color: var(--bg-primary, #0e1621);
+}
+
+.content {
+  text-align: center;
+  padding: 2rem;
+}
+
+.title {
+  font-size: 6rem;
+  font-weight: 700;
+  color: var(--color-primary, #5288c1);
+  margin: 0;
+  line-height: 1;
+}
+
+.message {
+  font-size: 1.5rem;
+  color: var(--text-primary, #ffffff);
+  margin: 1rem 0;
+}
+
+.description {
+  font-size: 1rem;
+  color: var(--text-secondary, #6c7883);
+  margin-bottom: 2rem;
+}
+
+.link {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--color-primary, #5288c1);
+  color: white;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.link:hover {
+  background-color: var(--color-primary-hover, #4a7ab0);
+}
