@@ -5,6 +5,8 @@ import { useAdminStore } from '@/entities/admin/model/adminStore';
 import { Button, Input } from '@/shared/ui';
 import type { User, PagedResponse } from '@/shared/types';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
 interface AdminStats {
   totalUsers: number;
   onlineUsers: number;
@@ -31,7 +33,7 @@ export function AdminDashboardPage() {
     setIsLoadingStats(true);
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await fetch('/api/admin/stats', {
+      const response = await fetch(`${API_BASE_URL}/admin/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
@@ -56,7 +58,7 @@ export function AdminDashboardPage() {
       if (search) {
         params.append('search', search);
       }
-      const response = await fetch(`/api/admin/users?${params}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
@@ -79,7 +81,7 @@ export function AdminDashboardPage() {
     setDeletingUserId(userId);
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await fetch(`/api/admin/users/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -102,7 +104,7 @@ export function AdminDashboardPage() {
     setIsDeletingAll(true);
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await fetch('/api/admin/users', {
+      const response = await fetch(`${API_BASE_URL}/admin/users`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiClient } from '@/shared/api/client';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
 interface AdminAuthResponse {
   accessToken: string;
   expiresAt: string;
@@ -67,7 +69,7 @@ export const useAdminStore = create<AdminState>()(
         }
 
         try {
-          const response = await fetch('/api/admin/verify', {
+          const response = await fetch(`${API_BASE_URL}/admin/verify`, {
             headers: {
               Authorization: `Bearer ${token}`,
             },
